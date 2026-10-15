@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบูรณาการข้อมูลการตายจากอุบัติเหตุทางถนน ปี 2567</title>
+    
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Load PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    
+    <!-- Load Leaflet CSS and JS for interactive maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Load Prompt Font for Thai language support -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Fix leaflet map font and stacking context */
+        .leaflet-container {
+            font-family: 'Prompt', sans-serif;
+            z-index: 0;
+        }
+        /* Custom card style */
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 1.5rem;
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased p-4 md:p-8">
+
+    <header class="mb-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Dashboard ข้อมูลผู้เสียชีวิตจากอุบัติเหตุทางถนน</h1>
+        <p class="text-gray-600 text-lg">ระบบบูรณาการข้อมูลการตายจากอุบัติเหตุทางถนน ปี 2567</p>
+    </header>
+
+    <main class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- ตัวกรองข้อมูล (Filters) -->
+        <div class="card bg-white p-4 flex flex-col md:flex-row gap-4 items-center justify-between border-l-4 border-indigo-500 shadow-sm">
+            <div class="flex items-center gap-2 w-full md:w-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <span class="font-semibold text-gray-700">ตัวกรองข้อมูลเชิงลึก:</span>
+            </div>
+            <div class="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                <select id="monthFilter" class="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 w-full md:w-48 font-prompt text-gray-700 bg-gray-50 cursor-pointer transition" onchange="applyFilters()">
+                    <option value="all">ทุกเดือน</option>
+                    <option value="1">มกราคม</option>
+                    <option value="2">กุมภาพันธ์</option>
+                    <option value="3">มีนาคม</option>
+                    <option value="4">เมษายน</option>
+                    <option value="5">พฤษภาคม</option>
+                    <option value="6">มิถุนายน</option>
+                    <option value="7">กรกฎาคม</option>
+                    <option value="8">สิงหาคม</option>
+                    <option value="9">กันยายน</option>
+                    <option value="10">ตุลาคม</option>
+                    <option value="11">พฤศจิกายน</option>
+                    <option value="12">ธันวาคม</option>
+                </select>
+                <select id="provinceFilter" class="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 w-full md:w-48 font-prompt text-gray-700 bg-gray-50 cursor-pointer transition" onchange="applyFilters()">
+                    <option value="all">ทุกจังหวัด</option>
+                    <!-- ตัวเลือกจังหวัดจะถูกดึงมาใส่ด้วย JavaScript -->
+                </select>
+            </div>
+        </div>
+
+        <!-- KPI Cards Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="card border-l-4 border-red-500 transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl cursor-pointer group">
+                <p class="text-sm text-gray-500 font-semibold mb-1 group-hover:text-red-500 transition-colors">ยอดผู้เสียชีวิต (ราย)</p>
+                <h2 id="kpi-total" class="text-3xl font-bold text-gray-800">...</h2>
+            </div>
+            <div class="card border-l-4 border-orange-500 transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl cursor-pointer group">
+                <p class="text-sm text-gray-500 font-semibold mb-1 group-hover:text-orange-500 transition-colors">เดือนที่มีผู้เสียชีวิตสูงสุด</p>
+                <h2 id="kpi-month" class="text-3xl font-bold text-gray-800">...</h2>
+            </div>
+            <div class="card border-l-4 border-yellow-500 transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl cursor-pointer group">
+                <p class="text-sm text-gray-500 font-semibold mb-1 group-hover:text-yellow-600 transition-colors">ช่วงอายุที่มีผู้เสียชีวิตสูงสุด</p>
+                <h2 id="kpi-age" class="text-3xl font-bold text-gray-800">...</h2>
+            </div>
+            <div class="card border-l-4 border-blue-500 transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl cursor-pointer group">
+                <p class="text-sm text-gray-500 font-semibold mb-1 group-hover:text-blue-500 transition-colors">สัดส่วน ชาย : หญิง</p>
+                <h2 id="kpi-gender" class="text-3xl font-bold text-gray-800">...</h2>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Line Chart: Monthly Trend -->
+            <div class="card transform transition-all duration-300 hover:shadow-lg">
+                <h3 class="text-lg font-semibold mb-4 text-gray-700">แนวโน้มผู้เสียชีวิตรายเดือน ปี 2567</h3>
+                <div class="relative h-64">
+                    <canvas id="monthlyTrendChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Pie Chart: Gender Distribution -->
+            <div class="card transform transition-all duration-300 hover:shadow-lg">
+                <h3 class="text-lg font-semibold mb-4 text-gray-700">สัดส่วนผู้เสียชีวิตจำแนกตามเพศ</h3>
+                <div class="relative h-64">
+                    <canvas id="genderPieChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Bar Chart: Age Groups -->
+            <div class="card transform transition-all duration-300 hover:shadow-lg">
+                <h3 class="text-lg font-semibold mb-4 text-gray-700">จำนวนผู้เสียชีวิตจำแนกตามช่วงอายุ</h3>
+                <div class="relative h-64">
+                    <canvas id="ageGroupChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Horizontal Bar Chart: Top 5 Provinces -->
+            <div class="card transform transition-all duration-300 hover:shadow-lg">
+                <h3 class="text-lg font-semibold mb-4 text-gray-700">5 จังหวัดที่มีผู้เสียชีวิตสูงสุด (จากข้อมูลที่กรอง)</h3>
+                <div class="relative h-64">
+                    <canvas id="provinceChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Section -->
+        <div class="card mb-6 transform transition-all duration-300 hover:shadow-lg">
+            <h3 class="text-lg font-semibold mb-4 text-gray-700">แผนที่แสดงจำนวนผู้เสียชีวิตแยกตามจังหวัด</h3>
+            <p class="text-sm text-gray-500 mb-4">* สามารถคลิกที่วงกลมเพื่อดูรายละเอียดสัดส่วนเพศในแต่ละจังหวัด</p>
+            <div id="thailandMap" class="w-full h-[500px] md:h-[600px] rounded-lg relative z-0 border border-gray-200"></div>
+        </div>
+    </main>
+
+    <script>
+        // กำหนดชื่อไฟล์ CSV เป้าหมาย
+        const CSV_FILENAME = 'ข้อมูลผู้เสียชีวิตจากอุบัติเหตุทางถนน_2567.csv';
+        
+        // ตัวแปรเก็บ Instance ของกราฟและแผนที่
+        let charts = {};
+        let mapInstance = null;
+        let globalRawData = []; // เก็บข้อมูลดิบทั้งหมดสำหรับระบบกรองข้อมูล
+
+        // พิกัดจังหวัด (ตัวอย่างสำหรับจังหวัดหลักและจังหวัดใน Mock data)
+        const provinceCoords = {
+            'กรุงเทพมหานคร': [13.7563, 100.5018],
+            'นครราชสีมา': [14.9799, 102.0978],
+            'เชียงใหม่': [18.7953, 98.9620],
+            'ชลบุรี': [13.3611, 100.9850],
+            'สงขลา': [7.1898, 100.5954],
+            'ขอนแก่น': [16.4322, 102.8236],
+            'อุบลราชธานี': [15.2448, 104.8473],
+            'เชียงราย': [19.9076, 99.8325],
+            'ภูเก็ต': [7.8804, 98.3923],
+            'สุราษฎร์ธานี': [9.1333, 99.3333],
+            'อุดรธานี': [17.3993, 102.7931],
+            'นครสวรรค์': [15.6987, 100.1228],
+            'ระยอง': [12.6814, 101.2816],
+            'พระนครศรีอยุธยา': [14.3516, 100.5774]
+        };
+
+        // ฟังก์ชันช่วย Format ตัวเลขให้มีลูกน้ำ
+        const formatNum = (num) => new Intl.NumberFormat('th-TH').format(num);
+
+        // จำลองข้อมูลหากไม่มีไฟล์ CSV อยู่จริง
+        function generateMockData() {
+            const provinces = Object.keys(provinceCoords);
+            const data = [];
+            
+            for(let i=0; i<1000; i++) {
+                const month = Math.floor(Math.random() * 12) + 1;
+                const day = Math.floor(Math.random() * 28) + 1;
+                const dateStr = `2024-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+                
+                let age = Math.floor(Math.random() * 90) + 1;
+                if(Math.random() > 0.4) age = Math.floor(Math.random() * (45 - 15) + 15);
+                
+                const gender = Math.random() > 0.25 ? 'ชาย' : 'หญิง';
+                const province = provinces[Math.floor(Math.random() * provinces.length)];
+                
+                data.push({
+                    'วันที่เกิดเหตุ': dateStr,
+                    'อายุ': age,
+                    'เพศ': gender,
+                    'จังหวัด': province
+                });
+            }
+            return data;
+        }
+
+        // ดึงรายการจังหวัดไปใส่ใน Dropdown
+        function populateProvinceFilter() {
+            const select = document.getElementById('provinceFilter');
+            const uniqueProvinces = [...new Set(globalRawData.map(item => item['จังหวัด']).filter(Boolean))].sort();
+            
+            uniqueProvinces.forEach(prov => {
+                const option = document.createElement('option');
+                option.value = prov;
+                option.textContent = prov;
+                select.appendChild(option);
+            });
+        }
+
+        // ฟังก์ชันสำหรับการกรองข้อมูลเมื่อมีการเปลี่ยนตัวเลือก
+        function applyFilters() {
+            const selectedMonth = document.getElementById('monthFilter').value;
+            const selectedProvince = document.getElementById('provinceFilter').value;
+
+            const filteredData = globalRawData.filter(row => {
+                let matchMonth = true;
+                let matchProvince = true;
+
+                if (selectedMonth !== 'all' && row['วันที่เกิดเหตุ']) {
+                    const monthIndex = parseInt(row['วันที่เกิดเหตุ'].split('-')[1], 10);
+                    matchMonth = monthIndex === parseInt(selectedMonth, 10);
+                }
+
+                if (selectedProvince !== 'all' && row['จังหวัด']) {
+                    matchProvince = row['จังหวัด'].trim() === selectedProvince;
+                }
+
+                return matchMonth && matchProvince;
+            });
+
+            processData(filteredData);
+        }
+
+        // ฟังก์ชันประมวลผลข้อมูล (ปรับปรุงให้รองรับข้อมูลเชิงลึกในแผนที่)
+        function processData(data) {
+            let totalDeaths = 0;
+            const monthlyCounts = Array(12).fill(0);
+            const ageGroups = {
+                '0-14': 0, '15-24': 0, '25-34': 0, '35-44': 0, '45-54': 0, '55-64': 0, '65+': 0
+            };
+            let male = 0, female = 0;
+            
+            // เปลี่ยนโครงสร้างเพื่อเก็บ ชาย/หญิง แยกตามจังหวัดด้วย
+            const provinceStats = {};
+
+            data.forEach(row => {
+                if(!row['วันที่เกิดเหตุ']) return;
+                totalDeaths++;
+
+                const dateParts = row['วันที่เกิดเหตุ'].split('-');
+                if(dateParts.length >= 2) {
+                    const monthIndex = parseInt(dateParts[1], 10) - 1;
+                    if(monthIndex >= 0 && monthIndex < 12) monthlyCounts[monthIndex]++;
+                }
+
+                if(row['เพศ'] === 'ชาย') male++;
+                else if(row['เพศ'] === 'หญิง') female++;
+
+                const age = parseInt(row['อายุ'], 10);
+                if(!isNaN(age)) {
+                    if(age <= 14) ageGroups['0-14']++;
+                    else if(age <= 24) ageGroups['15-24']++;
+                    else if(age <= 34) ageGroups['25-34']++;
+                    else if(age <= 44) ageGroups['35-44']++;
+                    else if(age <= 54) ageGroups['45-54']++;
+                    else if(age <= 64) ageGroups['55-64']++;
+                    else ageGroups['65+']++;
+                }
+
+                const prov = row['จังหวัด'] ? row['จังหวัด'].trim() : 'ไม่ระบุ';
+                if(prov) {
+                    if(!provinceStats[prov]) provinceStats[prov] = { total: 0, male: 0, female: 0 };
+                    provinceStats[prov].total++;
+                    if(row['เพศ'] === 'ชาย') provinceStats[prov].male++;
+                    if(row['เพศ'] === 'หญิง') provinceStats[prov].female++;
+                }
+            });
+
+            // อัพเดทตัวเลข KPI หน้าเว็บ
+            document.getElementById('kpi-total').innerText = formatNum(totalDeaths);
+            document.getElementById('kpi-gender').innerText = `${formatNum(male)} : ${formatNum(female)}`;
+
+            const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            const maxCount = Math.max(...monthlyCounts);
+            document.getElementById('kpi-month').innerText = maxCount > 0 ? thaiMonths[monthlyCounts.indexOf(maxCount)] : '-';
+
+            let maxAgeGrp = '';
+            let maxAgeVal = -1;
+            for (const [key, val] of Object.entries(ageGroups)) {
+                if(val > maxAgeVal) { maxAgeVal = val; maxAgeGrp = key; }
+            }
+            document.getElementById('kpi-age').innerText = maxAgeVal > 0 ? `${maxAgeGrp} ปี` : '-';
+
+            renderCharts(monthlyCounts, ageGroups, {male, female}, provinceStats);
+            renderMap(provinceStats);
+        }
+
+        function renderCharts(monthlyData, ageGroups, genderData, provinceStats) {
+            const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            
+            Chart.defaults.font.family = "'Prompt', sans-serif";
+            const commonOptions = { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false }
+            };
+
+            Object.values(charts).forEach(chart => chart.destroy());
+
+            // 1. Line Chart
+            charts.monthlyTrend = new Chart(document.getElementById('monthlyTrendChart'), {
+                type: 'line',
+                data: {
+                    labels: thaiMonths,
+                    datasets: [{
+                        label: 'จำนวนผู้เสียชีวิต (ราย)',
+                        data: monthlyData,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        pointBackgroundColor: '#ef4444',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#ef4444',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: commonOptions
+            });
+
+            // 2. Pie Chart (เพิ่ม Tooltip เปอร์เซ็นต์)
+            charts.genderPie = new Chart(document.getElementById('genderPieChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['ชาย', 'หญิง'],
+                    datasets: [{
+                        data: [genderData.male, genderData.female],
+                        backgroundColor: ['#3b82f6', '#ec4899'],
+                        hoverOffset: 4
+                    }]
+                },
+                options: { 
+                    ...commonOptions, 
+                    cutout: '65%',
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) label += ': ';
+                                    let total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    let value = context.raw;
+                                    let percentage = total > 0 ? ((value/total) * 100).toFixed(1) + '%' : '0%';
+                                    return label + formatNum(value) + ' ราย (' + percentage + ')';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 3. Bar Chart (ช่วงอายุ)
+            charts.ageGroup = new Chart(document.getElementById('ageGroupChart'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(ageGroups),
+                    datasets: [{
+                        label: 'จำนวนผู้เสียชีวิต (ราย)',
+                        data: Object.values(ageGroups),
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 4,
+                        hoverBackgroundColor: '#d97706'
+                    }]
+                },
+                options: commonOptions
+            });
+
+            // 4. Horizontal Bar (Top 5 จังหวัด) - ใช้ข้อมูลรวม (total)
+            const sortedProvinces = Object.entries(provinceStats)
+                .sort((a, b) => b[1].total - a[1].total)
+                .slice(0, 5);
+            
+            charts.province = new Chart(document.getElementById('provinceChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedProvinces.map(item => item[0]),
+                    datasets: [{
+                        label: 'จำนวนผู้เสียชีวิต (ราย)',
+                        data: sortedProvinces.map(item => Number(item[1].total)), 
+                        backgroundColor: '#8b5cf6',
+                        borderRadius: 4,
+                        hoverBackgroundColor: '#7c3aed'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { beginAtZero: true, ticks: { precision: 0 } },
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // แผนที่พร้อม Popups เชิงลึก
+        function renderMap(provinceStats) {
+            if (mapInstance) {
+                mapInstance.remove();
+            }
+
+            mapInstance = L.map('thailandMap').setView([13.736717, 100.523186], 5.5);
+
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, iPC, NAVTEQ, USGS, Intermap, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012',
+                maxZoom: 18
+            }).addTo(mapInstance);
+
+            for (const [province, stats] of Object.entries(provinceStats)) {
+                const coords = provinceCoords[province];
+                
+                if (coords) {
+                    const radius = Math.min(Math.max(stats.total * 800, 8000), 50000); 
+                    
+                    // สร้าง HTML สำหรับ Popup เชิงลึก
+                    const popupHTML = `
+                        <div class="text-center font-prompt p-1 min-w-[120px]">
+                            <b class="text-lg text-gray-800">${province}</b>
+                            <div class="border-t border-gray-200 my-2"></div>
+                            <p class="mb-1 text-sm text-gray-600">ผู้เสียชีวิต: <span class="text-red-600 font-bold text-lg">${formatNum(stats.total)}</span> ราย</p>
+                            <div class="flex justify-between text-xs text-gray-500 bg-gray-50 rounded p-1.5 mt-2 shadow-inner">
+                                <span class="text-blue-600 font-semibold">ชาย: ${formatNum(stats.male)}</span>
+                                <span class="text-pink-600 font-semibold">หญิง: ${formatNum(stats.female)}</span>
+                            </div>
+                        </div>
+                    `;
+
+                    L.circle(coords, {
+                        color: '#ef4444',
+                        fillColor: '#ef4444',
+                        fillOpacity: 0.4,
+                        weight: 1,
+                        radius: radius
+                    }).addTo(mapInstance).bindPopup(popupHTML);
+
+                    const textIcon = L.divIcon({
+                        className: 'bg-transparent border-none',
+                        html: `<div class="bg-white text-red-700 font-bold border-2 border-red-500 rounded-full w-8 h-8 flex items-center justify-center text-xs shadow-md shadow-gray-400 font-prompt cursor-pointer transition-transform hover:scale-110" style="margin-left: -16px; margin-top: -16px;">${formatNum(stats.total)}</div>`,
+                        iconSize: [0, 0]
+                    });
+                    
+                    // ผูก Popup เข้ากับ Marker ด้วย
+                    L.marker(coords, {icon: textIcon}).addTo(mapInstance).bindPopup(popupHTML);
+                }
+            }
+        }
+
+        async function init() {
+            try {
+                const response = await fetch(CSV_FILENAME);
+                if (!response.ok) throw new Error('ไม่พบไฟล์ หรือโหลดไม่สำเร็จ');
+                
+                const csvText = await response.text();
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        if(results.data && results.data.length > 0) {
+                            globalRawData = results.data;
+                            populateProvinceFilter();
+                            applyFilters(); // เริ่มต้นประมวลผลข้อมูลครั้งแรก
+                        } else {
+                            throw new Error('ไฟล์ CSV ว่างเปล่า');
+                        }
+                    }
+                });
+            } catch (error) {
+                console.warn(`${error.message} - ระบบจะทำการสร้างข้อมูลจำลอง (Mock Data) ขึ้นมาแทน`);
+                globalRawData = generateMockData();
+                populateProvinceFilter();
+                applyFilters(); // เริ่มต้นประมวลผลข้อมูลครั้งแรก
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+
+    </script>
+</body>
+</html>
